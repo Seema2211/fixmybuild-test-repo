@@ -1,6 +1,6 @@
 # Fix suggestion
 
-Install the Newtonsoft.Json NuGet package in the TestApp project
+Add the Newtonsoft.Json NuGet package to the project
 
 ## Key error lines
 ```
