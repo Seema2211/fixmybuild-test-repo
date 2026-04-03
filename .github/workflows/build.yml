@@ -19,10 +19,16 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore TestApp/TestApp.csproj 2>&1 | tee /tmp/ci.log
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet restore TestApp/TestApp.csproj 2>&1 | tee /tmp/ci.log
 
       - name: Build
-        run: dotnet build TestApp/TestApp.csproj --no-incremental 2>&1 | tee -a /tmp/ci.log
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build TestApp/TestApp.csproj --no-incremental 2>&1 | tee -a /tmp/ci.log
 
       - name: Report failure to FixMyBuild
         if: failure()
