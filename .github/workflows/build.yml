@@ -57,7 +57,8 @@ jobs:
               branch:       $branch,
               runId:        $runId,
               provider:     $provider,
-              actorLogin:   $actorLogin
+              actorLogin:   $actorLogin,
+              autoFix:      true
             }')
 
           HTTP_STATUS=$(curl -s -o /tmp/fmb_response.json -w "%{http_code}" \
