@@ -9,13 +9,61 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+
       - name: Restore
-        run: dotnet restore TestApp/TestApp.csproj
+        run: dotnet restore TestApp/TestApp.csproj 2>&1 | tee /tmp/ci.log
+
       - name: Build
-        run: dotnet build TestApp/TestApp.csproj --no-incremental
+        run: dotnet build TestApp/TestApp.csproj --no-incremental 2>&1 | tee -a /tmp/ci.log
+
+      - name: Report failure to FixMyBuild
+        if: failure()
+        env:
+          FMB_API_URL: ${{ secrets.APIURL }}
+          FMB_API_KEY: ${{ secrets.APIKEY }}
+        run: |
+          # Capture last 8 KB of build output as the error log
+          ERROR_LOG=$(tail -c 8000 /tmp/ci.log 2>/dev/null || echo "Build failed — see run ${{ github.run_id }}")
+
+          # Use jq to safely build JSON (handles newlines, quotes, special chars)
+          PAYLOAD=$(jq -n \
+            --arg pipelineName "${{ github.workflow }}" \
+            --arg errorLog     "$ERROR_LOG" \
+            --arg repoOwner    "${{ github.repository_owner }}" \
+            --arg repoName     "${{ github.event.repository.name }}" \
+            --arg branch       "${{ github.ref_name }}" \
+            --argjson runId    ${{ github.run_id }} \
+            --arg provider     "github" \
+            --arg actorLogin   "${{ github.actor }}" \
+            '{
+              pipelineName: $pipelineName,
+              errorLog:     $errorLog,
+              repoOwner:    $repoOwner,
+              repoName:     $repoName,
+              branch:       $branch,
+              runId:        $runId,
+              provider:     $provider,
+              actorLogin:   $actorLogin
+            }')
+
+          HTTP_STATUS=$(curl -s -o /tmp/fmb_response.json -w "%{http_code}" \
+            -X POST "${FMB_API_URL}/api/ingest" \
+            -H "Authorization: Bearer ${FMB_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          echo "FixMyBuild response (HTTP $HTTP_STATUS):"
+          cat /tmp/fmb_response.json
+
+          # Fail the step if the API call itself failed (not a 2xx)
+          if [[ "$HTTP_STATUS" != 2* ]]; then
+            echo "::warning::FixMyBuild ingest returned HTTP $HTTP_STATUS"
+          fi
